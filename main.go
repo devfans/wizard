@@ -14,6 +14,7 @@ import (
 
   "io/ioutil"
   "path/filepath"
+  "encoding/json"
 
   "github.com/devfans/envconf"
 )
@@ -162,8 +163,9 @@ func (m *Manager) spawn () {
       log.Fatalf("Failed to find executable: %v", exe)
     }
   }
-  log.Println("Wizard is launching process with below command")
-  log.Printf("%v %v", exe, args)
+  log.Println("Wizard is launching process with below command and args")
+  argstr, _ := json.Marshal(args)
+  log.Printf("%v %s", exe, argstr)
 
   cmd := exec.Command(exe, args...)
 
@@ -229,6 +231,7 @@ func main() {
     log.Fatalln("Subcommand is required: start/stop/status")
   }
   subcommand := os.Args[1]
+
   flagSet := flag.NewFlagSet("subcommand", flag.ExitOnError)
   configFile := flagSet.String("c", ".wiz", "wizard config file")
   flagSet.Parse(os.Args[2:])

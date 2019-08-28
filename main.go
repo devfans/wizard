@@ -156,6 +156,7 @@ func (m *Manager) spawn () {
 
   command := m.config.Get("cmd")
   exe, args := m.parseCommand(command)
+  exe = strings.Replace(exe, "~", os.Getenv("HOME"), 1)
   _, err = exec.LookPath(exe)
   if err != nil {
     exe, err = filepath.Abs(exe)
@@ -188,7 +189,10 @@ func (m *Manager) spawn () {
     cmd.Stdout = logFileObject
     cmd.Stderr = logFileObject
   }
-  cmd.Start()
+  err = cmd.Start()
+  if err != nil {
+    log.Fatalln("Failed to spawn the process, error:", err)
+  }
   m.pid = cmd.Process.Pid
 
   _, err = pidFileObject.WriteString(strconv.Itoa(m.pid))

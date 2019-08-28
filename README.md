@@ -32,7 +32,7 @@ Sample configuration
 dir = .
 log = app.log
 pid = app.pid
-command = server-run -c 1 -s 2
+cmd = server-run -c 1 -s 2
 
 ```
 

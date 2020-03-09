@@ -4,7 +4,7 @@ A light-weight process bootstrap to start/stop/check a process
 ## Get Started
 
 ```
-// wizard start/stop/status
+// wizard start/stop/restart/status
 
 IceWall:bin stefan$ ./wizard start
 2019/08/23 19:32:56 Process is started
@@ -24,7 +24,7 @@ IceWall:bin stefan$ ./wizard status
 
 ## Configuration
 
-Default config file `.wiz` to specify a config file `wizard start/stop/status -c app.wiz`
+Default config file `.wiz` to specify a config file `wizard start/stop/restart/status -c app.wiz`
 
 Sample configuration
 ```
@@ -34,8 +34,11 @@ log = app.log
 pid = app.pid
 cmd = server-run -c 1 -s 2
 
-```
+[env]
+var1=value1
+var2=value2
 
+```
 
 
 

@@ -7,6 +7,7 @@ import (
   "flag"
   "path"
   "time"
+  "fmt"
 
   "syscall"
   "strings"
@@ -67,6 +68,14 @@ func (m *Manager) Init() {
     }
     m.config.Put("log", path.Join(dir, logFile))
   }
+}
+
+func (m* Manager) getEnv() []string {
+  envs := make([]string, 0)
+  for key, value := range m.config.GetSection("env") {
+    envs = append(envs, fmt.Sprintf("%v=%v", key, value))
+  }
+  return envs
 }
 
 func (m *Manager) findProcess() bool {
@@ -156,6 +165,7 @@ func (m *Manager) spawn () {
 
   command := m.config.Get("cmd")
   exe, args := m.parseCommand(command)
+  exe = strings.Replace(exe, "~", os.Getenv("HOME"), 1)
   _, err = exec.LookPath(exe)
   if err != nil {
     exe, err = filepath.Abs(exe)
@@ -168,6 +178,12 @@ func (m *Manager) spawn () {
   log.Printf("%v %s", exe, argstr)
 
   cmd := exec.Command(exe, args...)
+  // Append extra env vars
+  envars := m.getEnv()
+  if len(envars) > 0 {
+    log.Println("Extra env vars:", envars)
+    cmd.Env = append(os.Environ(), envars...)
+  }
 
   // Add logging
   if m.logging {
@@ -188,7 +204,10 @@ func (m *Manager) spawn () {
     cmd.Stdout = logFileObject
     cmd.Stderr = logFileObject
   }
-  cmd.Start()
+  err = cmd.Start()
+  if err != nil {
+    log.Fatalln("Failed to spawn the process, error:", err)
+  }
   m.pid = cmd.Process.Pid
 
   _, err = pidFileObject.WriteString(strconv.Itoa(m.pid))
@@ -228,7 +247,7 @@ func (m *Manager) Status() {
 
 func main() {
   if len(os.Args) < 2 {
-    log.Fatalln("Subcommand is required: start/stop/status")
+    log.Fatalln("Subcommand is required: start/stop/restart/status")
   }
   subcommand := os.Args[1]
 
@@ -247,7 +266,11 @@ func main() {
     manager.Stop()
   case "status":
     manager.Status()
+  case "restart":
+    manager.Stop()
+    time.Sleep(500 * time.Millisecond)
+    manager.Start()
   default:
-    log.Fatalln("Subcommand should be start/stop/status")
+    log.Fatalln("Subcommand should be start/stop/restart/status")
   }
 }

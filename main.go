@@ -157,7 +157,7 @@ func(m *Manager) parseCommand(command string) (string, []string) {
 
 func (m *Manager) spawn () {
   pidFile := m.config.Get("pid")
-  pidFileObject, err := os.OpenFile(pidFile, os.O_RDWR|os.O_CREATE, 0755)
+  pidFileObject, err := os.OpenFile(pidFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0664)
   if err != nil {
     log.Fatalf("Failed to create pid file %v Error %v", pidFile, err)
   }
@@ -195,7 +195,7 @@ func (m *Manager) spawn () {
       }
     }
 
-    logFileObject, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE, 0755)
+    logFileObject, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE, 0664)
     if err != nil {
       log.Fatalln("Failed to create log file:", logFile)
     }
@@ -210,9 +210,12 @@ func (m *Manager) spawn () {
   }
   m.pid = cmd.Process.Pid
 
-  _, err = pidFileObject.WriteString(strconv.Itoa(m.pid))
+  count, err := pidFileObject.WriteString(strconv.Itoa(m.pid))
   if err != nil {
     log.Println("Failed to save pid file:", err)
+  }
+  if err = pidFileObject.Truncate(int64(count)); err != nil {
+    log.Println("Failed to truncate pid file:", err)
   }
   pidFileObject.Sync()
 }
@@ -253,6 +256,7 @@ func main() {
 
   flagSet := flag.NewFlagSet("subcommand", flag.ExitOnError)
   configFile := flagSet.String("c", ".wiz", "wizard config file")
+  interval := flagSet.Int("w", 1000, "seconds to wait before restart")
   flagSet.Parse(os.Args[2:])
 
   config := envconf.NewConfig(*configFile)
@@ -268,7 +272,7 @@ func main() {
     manager.Status()
   case "restart":
     manager.Stop()
-    time.Sleep(500 * time.Millisecond)
+    time.Sleep(time.Duration(*interval) * time.Millisecond)
     manager.Start()
   default:
     log.Fatalln("Subcommand should be start/stop/restart/status")

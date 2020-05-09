@@ -20,6 +20,9 @@ IceWall:bin stefan$ ./wizard stop
 
 IceWall:bin stefan$ ./wizard status
 2019/08/23 19:33:09 Process is stopped.
+
+IceWall:bin stefan$ ./wizard restart -w 2000 // wait 2000 millisecs after stopped before a restart
+
 ```
 
 ## Configuration

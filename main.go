@@ -256,7 +256,7 @@ func main() {
 
   flagSet := flag.NewFlagSet("subcommand", flag.ExitOnError)
   configFile := flagSet.String("c", ".wiz", "wizard config file")
-  interval := flagSet.Int("w", 1000, "seconds to wait before restart")
+  interval := flagSet.Int("w", 1000, "milliseconds to wait before restart")
   flagSet.Parse(os.Args[2:])
 
   config := envconf.NewConfig(*configFile)

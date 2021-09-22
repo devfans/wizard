@@ -6,12 +6,13 @@ builds:
       - linux
     goarch:
       - amd64
+      - arm64
 # Archive customization
-archive:
-  format: tar.gz
-  replacements:
-    amd64: 64-bit
-    darwin: macOS
-  files:
-    - LICENSE
-    - README.md
+archives:
+  - format: tar.gz
+    replacements:
+      amd64: 64-bit
+      darwin: macOS
+    files:
+      - LICENSE
+      - README.md

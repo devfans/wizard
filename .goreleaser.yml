@@ -1,7 +1,6 @@
 builds:
   - binary: wizard
     goos:
-      - windows
       - darwin
       - linux
     goarch:

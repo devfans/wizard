@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"log"
@@ -16,6 +17,8 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"path/filepath"
+
+	"golang.org/x/term"
 
 	"github.com/devfans/envconf"
 )
@@ -98,7 +101,7 @@ func (m *Manager) findProcess() bool {
 
 	m.process, err = os.FindProcess(m.pid)
 	if err != nil {
-		log.Printf("Failed to find process with pid:", m.pid)
+		log.Printf("Failed to find process with pid: %v", m.pid)
 		return false
 	}
 
@@ -159,7 +162,7 @@ func (m *Manager) parseCommand(command string) (string, []string) {
 	return "", args
 }
 
-func (m *Manager) spawn() {
+func (m *Manager) spawn(input bool) {
 	pidFile := m.config.Get("pid")
 	pidFileObject, err := os.OpenFile(pidFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0664)
 	if err != nil {
@@ -208,16 +211,26 @@ func (m *Manager) spawn() {
 		cmd.Stdout = logFileObject
 		cmd.Stderr = logFileObject
 	}
+
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		// Pdeathsig: syscall.SIGKILL,
 		Setpgid: true,
 	}
+
+	if input {
+		data, err := ReadInput("input")
+		if err != nil {
+			log.Fatalln("Failed to read input", err)
+		}
+		cmd.Stdin = bytes.NewReader(data)
+	}
+
 	err = cmd.Start()
 	if err != nil {
 		log.Fatalln("Failed to spawn the process, error:", err)
 	}
-	m.pid = cmd.Process.Pid
 
+	m.pid = cmd.Process.Pid
 	count, err := pidFileObject.WriteString(strconv.Itoa(m.pid))
 	if err != nil {
 		log.Println("Failed to save pid file:", err)
@@ -228,12 +241,12 @@ func (m *Manager) spawn() {
 	pidFileObject.Sync()
 }
 
-func (m *Manager) Start() {
+func (m *Manager) Start(input bool) {
 	if m.findProcess() {
 		log.Println("Process is already running")
 		return
 	}
-	m.spawn()
+	m.spawn(input)
 	log.Println("Process is started")
 }
 
@@ -274,6 +287,15 @@ func (m *Manager) Status() {
 	}
 }
 
+func ReadInput(name string) ([]byte, error) {
+	fmt.Printf("Enter %s: \n", name)
+	passphrase, err := term.ReadPassword(int(syscall.Stdin))
+	if err != nil {
+		return nil, err
+	}
+	return passphrase, nil
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		log.Fatalln("Subcommand is required: start/stop/restart/status")
@@ -284,6 +306,7 @@ func main() {
 	configFile := flagSet.String("c", ".wiz", "wizard config file")
 	interval := flagSet.Int("w", 1, "seconds to wait before restart")
 	force := flagSet.Int("f", 0, "seconds to wait before force the process to exit(0: always wait till exit)")
+	input := flagSet.Bool("i", false, "send input to command stdin")
 	flagSet.Parse(os.Args[2:])
 	_KILL_WAIT = *force * 100
 
@@ -293,7 +316,7 @@ func main() {
 
 	switch strings.ToLower(subcommand) {
 	case "start":
-		manager.Start()
+		manager.Start(*input)
 	case "stop":
 		manager.Stop()
 	case "status":
@@ -301,7 +324,7 @@ func main() {
 	case "restart":
 		manager.Stop()
 		time.Sleep(time.Duration(*interval) * time.Millisecond)
-		manager.Start()
+		manager.Start(*input)
 	default:
 		log.Fatalln("Subcommand should be start/stop/restart/status")
 	}

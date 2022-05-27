@@ -297,8 +297,8 @@ func ReadInput(name string) ([]byte, error) {
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		log.Fatalln("Subcommand is required: start/stop/restart/status")
+	if len(os.Args) < 2 || strings.TrimSpace(os.Args[1]) == "-h" {
+		log.Fatalln("Valid subcommand is required: start/stop/restart/status")
 	}
 	subcommand := os.Args[1]
 

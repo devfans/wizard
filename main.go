@@ -2,9 +2,7 @@ package main
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path"
@@ -21,11 +19,22 @@ import (
 	"golang.org/x/term"
 
 	"github.com/devfans/envconf"
+	"github.com/urfave/cli/v2"
 )
 
 var (
+	manager *Manager
 	_KILL_WAIT = 0
 )
+
+func Fatal(msg string, args... interface{}) {
+	fmt.Println(fmt.Sprintf(msg, args...))
+	os.Exit(2)
+}
+
+func Info(msg string, args... interface{}) {
+	fmt.Println(fmt.Sprintf(msg, args...))
+}
 
 type Manager struct {
 	pid     int
@@ -44,14 +53,14 @@ func (m *Manager) Init() {
 	}
 	dir, err = filepath.Abs(dir)
 	if err != nil {
-		log.Fatalln("Invalid work directory:", err)
+		Fatal("Invalid work directory: %v", err)
 	}
 	m.config.Put("dir", dir)
 
 	// Validate command path
 	cmd := m.config.Get("cmd")
 	if cmd == "" {
-		log.Fatalln("Command not specified")
+		Fatal("Process command line is not specified")
 	}
 
 	// Validate pid file path
@@ -89,19 +98,19 @@ func (m *Manager) findProcess() bool {
 	pidFile := m.config.Get("pid")
 	pidData, err := ioutil.ReadFile(pidFile)
 	if err != nil {
-		log.Printf("Failed to read pid file: %v", pidFile)
+		Info("Failed to read pid file: %v", err)
 		return false
 	}
 
 	m.pid, err = strconv.Atoi(string(pidData))
 	if err != nil {
-		log.Println("Failed to read process pid")
+		Info("Failed to read process pid: %v", err)
 		return false
 	}
 
 	m.process, err = os.FindProcess(m.pid)
 	if err != nil {
-		log.Printf("Failed to find process with pid: %v", m.pid)
+		Info("Failed to find process with pid: %v", err)
 		return false
 	}
 
@@ -166,7 +175,7 @@ func (m *Manager) spawn(input bool) {
 	pidFile := m.config.Get("pid")
 	pidFileObject, err := os.OpenFile(pidFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0664)
 	if err != nil {
-		log.Fatalf("Failed to create pid file %v Error %v", pidFile, err)
+		Fatal("Failed to create pid file %v: %v", pidFile, err)
 	}
 	defer pidFileObject.Close()
 
@@ -177,18 +186,18 @@ func (m *Manager) spawn(input bool) {
 	if err != nil {
 		exe, err = filepath.Abs(exe)
 		if err != nil {
-			log.Fatalf("Failed to find executable: %v", exe)
+			Fatal("Failed to find executable %v: %v", exe, err)
 		}
 	}
-	log.Println("Wizard is launching process with below command and args")
+	Info("Wizard is launching process with below command and args")
 	argstr, _ := json.Marshal(args)
-	log.Printf("%v %s", exe, argstr)
+	Info("%v %s", exe, string(argstr))
 
 	cmd := exec.Command(exe, args...)
 	// Append extra env vars
 	envars := m.getEnv()
 	if len(envars) > 0 {
-		log.Println("Extra env vars:", envars)
+		Info("Extra env vars: %v", envars)
 		cmd.Env = append(os.Environ(), envars...)
 	}
 
@@ -198,13 +207,13 @@ func (m *Manager) spawn(input bool) {
 		if _, err := os.Stat(logFile); err == nil {
 			err = os.Rename(logFile, logFile+string(time.Now().Format(time.RFC3339)))
 			if err != nil {
-				log.Println("Failed to rename old log file:", logFile)
+				Info("Failed to rename old log file %v: %v", logFile, err)
 			}
 		}
 
 		logFileObject, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE, 0664)
 		if err != nil {
-			log.Fatalln("Failed to create log file:", logFile)
+			Fatal("Failed to create log file %v: %v", logFile, err)
 		}
 		defer logFileObject.Close()
 
@@ -220,42 +229,41 @@ func (m *Manager) spawn(input bool) {
 	if input {
 		data, err := ReadInput("input")
 		if err != nil {
-			log.Fatalln("Failed to read input", err)
+			Fatal("Failed to read input: %v", err)
 		}
 		cmd.Stdin = bytes.NewReader(data)
 	}
 
 	err = cmd.Start()
 	if err != nil {
-		log.Fatalln("Failed to spawn the process, error:", err)
+		Fatal("Failed to spawn the process: %v", err)
 	}
 
 	m.pid = cmd.Process.Pid
 	count, err := pidFileObject.WriteString(strconv.Itoa(m.pid))
 	if err != nil {
-		log.Println("Failed to save pid file:", err)
+		Info("Failed to save pid file: %v", err)
 	}
 	if err = pidFileObject.Truncate(int64(count)); err != nil {
-		log.Println("Failed to truncate pid file:", err)
+		Info("Failed to truncate pid file: %v", err)
 	}
 	pidFileObject.Sync()
 }
 
 func (m *Manager) Start(input bool) {
 	if m.findProcess() {
-		log.Println("Process is already running")
+		Info("Process is already running")
 		return
 	}
 	m.spawn(input)
-	log.Println("Process is started")
+	Info("Process is started")
 }
 
 func (m *Manager) Stop() {
 	if m.findProcess() {
 		err := m.process.Signal(syscall.SIGTERM)
 		if err != nil {
-			log.Println("Error encountered", err)
-			return
+			Fatal("Error encountered: %v", err)
 		}
 		count := 0
 		for {
@@ -264,10 +272,10 @@ func (m *Manager) Stop() {
 				break
 			}
 			if count > _KILL_WAIT && _KILL_WAIT > 0 {
-				log.Println("Force process to exit now...")
+				Info("Force process to exit now...")
 				err = m.process.Kill()
 				if err != nil {
-					log.Println("Error encountered", err)
+					Info("Error encountered: %v", err)
 				}
 				break
 			} else {
@@ -276,14 +284,14 @@ func (m *Manager) Stop() {
 			}
 		}
 	}
-	log.Println("Process is stopped")
+	Info("Process is stopped")
 }
 
 func (m *Manager) Status() {
 	if m.findProcess() {
-		log.Println("Process is running.")
+		Info("Process is running.")
 	} else {
-		log.Println("Process is stopped.")
+		Info("Process is stopped.")
 	}
 }
 
@@ -296,36 +304,106 @@ func ReadInput(name string) ([]byte, error) {
 	return passphrase, nil
 }
 
-func main() {
-	if len(os.Args) < 2 || strings.TrimSpace(os.Args[1]) == "-h" {
-		log.Fatalln("Valid subcommand is required: start/stop/restart/status")
-	}
-	subcommand := os.Args[1]
-
-	flagSet := flag.NewFlagSet("subcommand", flag.ExitOnError)
-	configFile := flagSet.String("c", ".wiz", "wizard config file")
-	interval := flagSet.Int("w", 1, "seconds to wait before restart")
-	force := flagSet.Int("f", 0, "seconds to wait before force the process to exit(0: always wait till exit)")
-	input := flagSet.Bool("i", false, "send input to command stdin")
-	flagSet.Parse(os.Args[2:])
-	_KILL_WAIT = *force * 100
-
-	config := envconf.NewConfig(*configFile)
-	manager := Manager{config: config, logging: true}
+func initialize(ctx *cli.Context) (err error) {
+	config := envconf.NewConfig(ctx.String("config"))
+	manager = &Manager{config: config, logging: true}
 	manager.Init()
+	return
+}
 
-	switch strings.ToLower(subcommand) {
-	case "start":
-		manager.Start(*input)
-	case "stop":
-		manager.Stop()
-	case "status":
-		manager.Status()
-	case "restart":
-		manager.Stop()
-		time.Sleep(time.Duration(*interval) * time.Millisecond)
-		manager.Start(*input)
-	default:
-		log.Fatalln("Subcommand should be start/stop/restart/status")
+func start(ctx *cli.Context) (err error) {
+	manager.Start(ctx.Bool("i"))
+	return
+}
+
+func status(ctx *cli.Context) (err error) {
+	manager.Status()
+	return
+}
+
+func stop(ctx *cli.Context) (err error) {
+	_KILL_WAIT = ctx.Int("f") * 100
+	manager.Stop()
+	return
+}
+
+func restart(ctx *cli.Context) (err error) {
+	stop(ctx)
+	time.Sleep(time.Duration(ctx.Int("w")) * time.Second)
+	start(ctx)
+	return
+}
+
+func main() {
+	app := &cli.App{
+		Name:   "wizard",
+		Usage:  "The awesome process manager",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "c",
+				Aliases: []string{"config", "conf"},
+				Value: ".wiz",
+				Usage: "wizard configuration file",
+			},
+		},
+		Before: initialize,
+		Commands: []*cli.Command{
+			&cli.Command{
+				Name:   "start",
+				Usage:  "Launch the process",
+				Action: start,
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:     "i",
+						Aliases:  []string{"input", "stdin"},
+						Usage:    "input from stdin",
+					},
+				},
+			},
+			&cli.Command{
+				Name:   "stop",
+				Usage:  "Stop the running process",
+				Action: stop,
+				Flags: []cli.Flag{
+					&cli.IntFlag{
+						Name:     "f",
+						Aliases:  []string{"force"},
+						Usage:    "seconds later to force the process to exit if process wont stop and specified bigger than 0",
+					},
+				},
+			},
+			&cli.Command{
+				Name:   "status",
+				Usage:  "Check status of the process",
+				Action: status,
+			},
+			&cli.Command{
+				Name:   "restart",
+				Usage:  "Restart the process",
+				Action: restart,
+				Flags: []cli.Flag{
+					&cli.IntFlag{
+						Name:     "f",
+						Aliases:  []string{"force"},
+						Usage:    "seconds later to force the process to exit if process wont stop and specified bigger than 0",
+					},
+					&cli.IntFlag{
+						Name:     "w",
+						Aliases:  []string{"wait"},
+						Value: 1,
+						Usage:    "seconds to wait before start the process again after it's stopped",
+					},
+					&cli.BoolFlag{
+						Name:     "i",
+						Aliases:  []string{"input", "stdin"},
+						Usage:    "input from stdin",
+					},
+				},
+			},
+		},
+	}
+	err := app.Run(os.Args)
+	if err != nil {
+		Fatal("Failed: %v", err)
 	}
 }

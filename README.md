@@ -1,33 +1,31 @@
 # wizard
-A light-weight process bootstrap to start/stop/check a process 
+A light-weight process bootstrap to manage a process 
 
 ## Get Started
 
 ```
-// wizard start/stop/restart/status
+NAME:
+   wizard - The awesome process manager
 
-IceWall:bin stefan$ ./wizard start
-2019/08/23 19:32:56 Process is started
+USAGE:
+   wizard [global options] command [command options] [arguments...]
 
-IceWall:bin stefan$ ./wizard status
-2019/08/23 19:32:59 Process is running.
+COMMANDS:
+   start    Launch the process
+   stop     Stop the running process
+   status   Check status of the process
+   restart  Restart the process
+   help, h  Shows a list of commands or help for one command
 
-IceWall:bin stefan$ ./wizard start
-2019/08/23 19:33:04 Process is already running
-
-IceWall:bin stefan$ ./wizard stop
-2019/08/23 19:33:07 Process is stopped
-
-IceWall:bin stefan$ ./wizard status
-2019/08/23 19:33:09 Process is stopped.
-
-IceWall:bin stefan$ ./wizard restart -w 2000 // wait 2000 millisecs after stopped before a restart
+GLOBAL OPTIONS:
+   --help, -h                              show help (default: false)
+   -c value, --config value, --conf value  wizard configuration file (default: ".wiz")
 
 ```
 
 ## Configuration
 
-Default config file `.wiz` to specify a config file `wizard start/stop/restart/status -c app.wiz`
+Default config file `.wiz`, to specify a config file `wizard -c app.wiz start/stop/restart/status`
 
 Sample configuration
 ```

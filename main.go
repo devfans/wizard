@@ -27,13 +27,28 @@ var (
 	_KILL_WAIT = 0
 )
 
+// Attribute defines a single SGR Code
+type Attribute int
+
+// Foreground text colors
+const (
+	FgBlack Attribute = iota + 30
+	FgRed
+	FgGreen
+	FgYellow
+	FgBlue
+	FgMagenta
+	FgCyan
+	FgWhite
+)
+
 func Fatal(msg string, args... interface{}) {
-	fmt.Println(fmt.Sprintf(msg, args...))
+	fmt.Printf("\x1b[%dm> %s\x1b[0m\n", FgRed, fmt.Sprintf(msg, args...))
 	os.Exit(2)
 }
 
 func Info(msg string, args... interface{}) {
-	fmt.Println(fmt.Sprintf(msg, args...))
+	fmt.Printf("\x1b[%dm> %s\x1b[0m\n", FgCyan, fmt.Sprintf(msg, args...))
 }
 
 type Manager struct {

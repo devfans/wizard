@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	manager *Manager
+	manager    *Manager
 	_KILL_WAIT = 0
 )
 
@@ -42,12 +42,12 @@ const (
 	FgWhite
 )
 
-func Fatal(msg string, args... interface{}) {
+func Fatal(msg string, args ...interface{}) {
 	fmt.Printf("\x1b[%dm> %s\x1b[0m\n", FgRed, fmt.Sprintf(msg, args...))
 	os.Exit(2)
 }
 
-func Info(msg string, args... interface{}) {
+func Info(msg string, args ...interface{}) {
 	fmt.Printf("\x1b[%dm> %s\x1b[0m\n", FgCyan, fmt.Sprintf(msg, args...))
 }
 
@@ -117,7 +117,7 @@ func (m *Manager) findProcess() bool {
 		return false
 	}
 
-	m.pid, err = strconv.Atoi(string(pidData))
+	m.pid, err = strconv.Atoi(strings.TrimSpace(string(pidData)))
 	if err != nil {
 		Info("Failed to read process pid: %v", err)
 		return false
@@ -351,14 +351,14 @@ func restart(ctx *cli.Context) (err error) {
 
 func main() {
 	app := &cli.App{
-		Name:   "wizard",
-		Usage:  "The awesome process manager",
+		Name:  "wizard",
+		Usage: "The awesome process manager",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:  "c",
+				Name:    "c",
 				Aliases: []string{"config", "conf"},
-				Value: ".wiz",
-				Usage: "wizard configuration file",
+				Value:   ".wiz",
+				Usage:   "wizard configuration file",
 			},
 		},
 		Before: initialize,
@@ -369,9 +369,9 @@ func main() {
 				Action: start,
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
-						Name:     "i",
-						Aliases:  []string{"input", "stdin"},
-						Usage:    "input from stdin",
+						Name:    "i",
+						Aliases: []string{"input", "stdin"},
+						Usage:   "input from stdin",
 					},
 				},
 			},
@@ -381,9 +381,9 @@ func main() {
 				Action: stop,
 				Flags: []cli.Flag{
 					&cli.IntFlag{
-						Name:     "f",
-						Aliases:  []string{"force"},
-						Usage:    "seconds later to force the process to exit if process wont stop and specified bigger than 0",
+						Name:    "f",
+						Aliases: []string{"force"},
+						Usage:   "seconds later to force the process to exit if process wont stop and specified bigger than 0",
 					},
 				},
 			},
@@ -398,20 +398,20 @@ func main() {
 				Action: restart,
 				Flags: []cli.Flag{
 					&cli.IntFlag{
-						Name:     "f",
-						Aliases:  []string{"force"},
-						Usage:    "seconds later to force the process to exit if process wont stop and specified bigger than 0",
+						Name:    "f",
+						Aliases: []string{"force"},
+						Usage:   "seconds later to force the process to exit if process wont stop and specified bigger than 0",
 					},
 					&cli.IntFlag{
-						Name:     "w",
-						Aliases:  []string{"wait"},
-						Value: 1,
-						Usage:    "seconds to wait before start the process again after it's stopped",
+						Name:    "w",
+						Aliases: []string{"wait"},
+						Value:   1,
+						Usage:   "seconds to wait before start the process again after it's stopped",
 					},
 					&cli.BoolFlag{
-						Name:     "i",
-						Aliases:  []string{"input", "stdin"},
-						Usage:    "input from stdin",
+						Name:    "i",
+						Aliases: []string{"input", "stdin"},
+						Usage:   "input from stdin",
 					},
 				},
 			},

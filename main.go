@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"sync"
 	"time"
 
 	"strconv"
@@ -51,15 +52,20 @@ func Info(msg string, args ...interface{}) {
 	fmt.Printf("\x1b[%dm> %s\x1b[0m\n", FgCyan, fmt.Sprintf(msg, args...))
 }
 
+func Warn(msg string, args ...interface{}) {
+	fmt.Printf("\x1b[%dm> %s\x1b[0m\n", FgYellow, fmt.Sprintf(msg, args...))
+}
+
 type Manager struct {
 	pid     int
 	logging bool
 	process *os.Process
+	daemon  bool
 
 	config *envconf.Config
 }
 
-func (m *Manager) Init() {
+func (m *Manager) Init() error {
 	var err error
 	// Validate work directory
 	dir := m.config.Get("dir")
@@ -68,14 +74,14 @@ func (m *Manager) Init() {
 	}
 	dir, err = filepath.Abs(dir)
 	if err != nil {
-		Fatal("Invalid work directory: %v", err)
+		return fmt.Errorf("invalid work directory: %v", err)
 	}
 	m.config.Put("dir", dir)
 
 	// Validate command path
 	cmd := m.config.Get("cmd")
-	if cmd == "" {
-		Fatal("Process command line is not specified")
+	if cmd == "" && !m.daemon {
+		return fmt.Errorf("process command line is not specified")
 	}
 
 	// Validate pid file path
@@ -99,6 +105,7 @@ func (m *Manager) Init() {
 		}
 		m.config.Put("log", path.Join(dir, logFile))
 	}
+	return nil
 }
 
 func (m *Manager) getEnv() []string {
@@ -186,11 +193,60 @@ func (m *Manager) parseCommand(command string) (string, []string) {
 	return "", args
 }
 
-func (m *Manager) spawn(input bool) {
+func (m *Manager) Watch(interval time.Duration) {
+	Info("Wizard daemon watch interval %v", interval)
+	sec := m.config.GetSection("daemon")
+	wg := &sync.WaitGroup{}
+	for _, path := range sec.List() {
+		wg.Add(1)
+		go func (path string, interval time.Duration) {
+			m.watch(path, interval)
+			wg.Done()
+		} (path, interval)
+	}
+	wg.Wait()
+}
+
+func (m *Manager) watch(path string, interval time.Duration) {
+	path = strings.Replace(path, "~", os.Getenv("HOME"), 1)
+	if info, err := os.Stat(path); err != nil {
+		Warn("Invalid process path: %v", path)
+		return
+	} else if info.IsDir() {
+		path = filepath.Join(path, ".wiz")
+	}
+	Info("Starting process daemon for %s", path)
+	config := envconf.NewConfig(path)
+	dir := config.Get("dir")
+	if dir == "" {
+		config.Put("dir", filepath.Dir(path))
+	}
+	pm := &Manager{config: config, logging: true}
+	err := pm.Init()
+	if err != nil {
+		Warn("Failed to init daemon for process %s, err: %v", path, err)
+		return
+	}
+	timer := time.NewTicker(interval)
+	for range timer.C {
+		if !pm.findProcess() {
+			Warn("Found stopped process %v, starting it now...", path)
+			err := pm.spawn(false)
+			if err != nil {
+				Warn(err.Error())
+			} else {
+				Warn("Spawned the process %v, now wait %v till check it again.", path, interval * 10)
+				time.Sleep(interval * 10)
+			}
+		}
+	}
+}
+
+func (m *Manager) spawn(input bool) error {
 	pidFile := m.config.Get("pid")
 	pidFileObject, err := os.OpenFile(pidFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0664)
 	if err != nil {
-		Fatal("Failed to create pid file %v: %v", pidFile, err)
+		return fmt.Errorf("failed to create pid file %v: %v", pidFile, err)
 	}
 	defer pidFileObject.Close()
 
@@ -201,7 +257,7 @@ func (m *Manager) spawn(input bool) {
 	if err != nil {
 		exe, err = filepath.Abs(exe)
 		if err != nil {
-			Fatal("Failed to find executable %v: %v", exe, err)
+			return fmt.Errorf("failed to find executable %v: %v", exe, err)
 		}
 	}
 	Info("Wizard is launching process with below command and args")
@@ -228,7 +284,7 @@ func (m *Manager) spawn(input bool) {
 
 		logFileObject, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE, 0664)
 		if err != nil {
-			Fatal("Failed to create log file %v: %v", logFile, err)
+			return fmt.Errorf("failed to create log file %v: %v", logFile, err)
 		}
 		defer logFileObject.Close()
 
@@ -244,14 +300,24 @@ func (m *Manager) spawn(input bool) {
 	if input {
 		data, err := ReadInput("input")
 		if err != nil {
-			Fatal("Failed to read input: %v", err)
+			return fmt.Errorf("failed to read input: %v", err)
 		}
 		cmd.Stdin = bytes.NewReader(data)
 	}
 
+	dir := m.config.Get("dir")
+	if dir == "" {
+		dir = "."
+	}
+	dir, err = filepath.Abs(dir)
+	if err != nil {
+		return fmt.Errorf("invalid work directory: %v", err)
+	}
+	cmd.Dir = dir
+
 	err = cmd.Start()
 	if err != nil {
-		Fatal("Failed to spawn the process: %v", err)
+		return fmt.Errorf("failed to spawn the process: %v", err)
 	}
 
 	m.pid = cmd.Process.Pid
@@ -263,6 +329,10 @@ func (m *Manager) spawn(input bool) {
 		Info("Failed to truncate pid file: %v", err)
 	}
 	pidFileObject.Sync()
+	if manager.daemon {
+		cmd.Wait()
+	}
+	return nil
 }
 
 func (m *Manager) Start(input bool) {
@@ -270,7 +340,10 @@ func (m *Manager) Start(input bool) {
 		Info("Process is already running")
 		return
 	}
-	m.spawn(input)
+	err := m.spawn(input)
+	if err != nil {
+		Fatal(err.Error())
+	}
 	Info("Process is started")
 }
 
@@ -319,11 +392,19 @@ func ReadInput(name string) ([]byte, error) {
 	return passphrase, nil
 }
 
-func initialize(ctx *cli.Context) (err error) {
-	config := envconf.NewConfig(ctx.String("config"))
-	manager = &Manager{config: config, logging: true}
-	manager.Init()
-	return
+func initialize(ctx *cli.Context) error {
+	path := ctx.String("config")
+	isDaemon := ctx.Args().First() == "daemon"
+	if isDaemon {
+		path = "~/.wiz"
+	}
+	config := envconf.NewConfig(path)
+	manager = &Manager{config: config, logging: true, daemon: isDaemon}
+	err := manager.Init()
+	if err != nil {
+		Fatal(err.Error())
+	}
+	return nil
 }
 
 func start(ctx *cli.Context) (err error) {
@@ -346,6 +427,11 @@ func restart(ctx *cli.Context) (err error) {
 	stop(ctx)
 	time.Sleep(time.Duration(ctx.Int("w")) * time.Second)
 	start(ctx)
+	return
+}
+
+func daemon(ctx *cli.Context) (err error) {
+	manager.Watch(time.Duration(ctx.Int("w")) * time.Second)
 	return
 }
 
@@ -412,6 +498,19 @@ func main() {
 						Name:    "i",
 						Aliases: []string{"input", "stdin"},
 						Usage:   "input from stdin",
+					},
+				},
+			},
+			{
+				Name: "daemon",
+				Usage: "Wizard daemon process to watch specified processes",
+				Action: daemon,
+				Flags: []cli.Flag {
+					&cli.IntFlag{
+						Name:    "w",
+						Aliases: []string{"wait"},
+						Value:   1,
+						Usage:   "seconds as interval to check the status of processes",
 					},
 				},
 			},

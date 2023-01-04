@@ -15,11 +15,12 @@ COMMANDS:
    stop     Stop the running process
    status   Check status of the process
    restart  Restart the process
+   daemon   Wizard daemon process to watch specified processes
    help, h  Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:
-   --help, -h                              show help (default: false)
    -c value, --config value, --conf value  wizard configuration file (default: ".wiz")
+   --help, -h                              show help (default: false)
 
 ```
 
@@ -40,6 +41,30 @@ var1=value1
 var2=value2
 
 ```
+
+## Daemon
+
+Wizard can start a daemon process to watch specified processes in `~/.wiz`
+
+Sampe `~/.wiz` 
+
+```
+[main]
+cmd = wizard daemon
+
+[daemon]
+~/app1
+~/app2/dir2
+~/app3/.wiz
+```
+
+Sample `~/app3/.wiz`
+
+```
+cmd = server-run -s -c
+no_daemon = false // set true to skip daemon watching
+```
+
 
 
 

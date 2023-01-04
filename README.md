@@ -51,7 +51,6 @@ Sampe `~/.wiz`
 ```
 [main]
 cmd = wizard daemon
-interval = 1000 // specify daemon watch interval(ms)
 
 [daemon]
 ~/app1
@@ -63,7 +62,9 @@ Sample `~/app3/.wiz`
 
 ```
 cmd = server-run -s -c
-no_daemon = false // set true to skip daemon watching
+no_daemon = false  // set true to skip daemon watching
+interval = 1000    // specify daemon watch interval(ms)
+
 ```
 
 

@@ -363,7 +363,7 @@ func main() {
 		},
 		Before: initialize,
 		Commands: []*cli.Command{
-			&cli.Command{
+			{
 				Name:   "start",
 				Usage:  "Launch the process",
 				Action: start,
@@ -375,7 +375,7 @@ func main() {
 					},
 				},
 			},
-			&cli.Command{
+			{
 				Name:   "stop",
 				Usage:  "Stop the running process",
 				Action: stop,
@@ -387,12 +387,12 @@ func main() {
 					},
 				},
 			},
-			&cli.Command{
+			{
 				Name:   "status",
 				Usage:  "Check status of the process",
 				Action: status,
 			},
-			&cli.Command{
+			{
 				Name:   "restart",
 				Usage:  "Restart the process",
 				Action: restart,

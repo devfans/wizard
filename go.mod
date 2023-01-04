@@ -1,4 +1,4 @@
-module wizard
+module github.com/devfans/wizard
 
 go 1.17
 

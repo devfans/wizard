@@ -53,6 +53,9 @@ func Info(msg string, args ...interface{}) {
 }
 
 func Warn(msg string, args ...interface{}) {
+	if manager.daemon {
+		msg = time.Now().Format(time.RFC3339) + " - " + msg
+	}
 	fmt.Printf("\x1b[%dm> %s\x1b[0m\n", FgYellow, fmt.Sprintf(msg, args...))
 }
 
@@ -193,21 +196,21 @@ func (m *Manager) parseCommand(command string) (string, []string) {
 	return "", args
 }
 
-func (m *Manager) Watch(interval time.Duration) {
-	Info("Wizard daemon watch interval %v", interval)
+func (m *Manager) Watch() {	
 	sec := m.config.GetSection("daemon")
 	wg := &sync.WaitGroup{}
 	for _, path := range sec.List() {
 		wg.Add(1)
-		go func (path string, interval time.Duration) {
-			m.watch(path, interval)
+		go func (path string) {
+			m.watch(path)
 			wg.Done()
-		} (path, interval)
+		} (path)
 	}
 	wg.Wait()
+	Warn("All daemon exits, now stopping...")
 }
 
-func (m *Manager) watch(path string, interval time.Duration) {
+func (m *Manager) watch(path string) {
 	path = strings.Replace(path, "~", os.Getenv("HOME"), 1)
 	if info, err := os.Stat(path); err != nil {
 		Warn("Invalid process path: %v", path)
@@ -215,18 +218,28 @@ func (m *Manager) watch(path string, interval time.Duration) {
 	} else if info.IsDir() {
 		path = filepath.Join(path, ".wiz")
 	}
-	Info("Starting process daemon for %s", path)
 	config := envconf.NewConfig(path)
 	dir := config.Get("dir")
 	if dir == "" {
 		config.Put("dir", filepath.Dir(path))
 	}
+	if config.Get("no_daemon") == "true" {
+		Warn("Skipping process %s as required.", path)
+		return
+	} 
 	pm := &Manager{config: config, logging: true}
 	err := pm.Init()
 	if err != nil {
 		Warn("Failed to init daemon for process %s, err: %v", path, err)
 		return
 	}
+	intervalValue, err := strconv.ParseInt(config.GetConf("interval", "1000"), 10, 0)
+	if err != nil {
+		Warn("Invalid interval string, err %v, will use 1s instead", config.GetConf("interval"), err)
+		intervalValue = 1000
+	}
+	interval := time.Duration(intervalValue) * time.Millisecond
+	Info("Starting process daemon for %s", path)
 	timer := time.NewTicker(interval)
 	for range timer.C {
 		if !pm.findProcess() {
@@ -235,7 +248,7 @@ func (m *Manager) watch(path string, interval time.Duration) {
 			if err != nil {
 				Warn(err.Error())
 			} else {
-				Warn("Spawned the process %v, now wait %v till check it again.", path, interval * 10)
+				Warn("Will check process %v after %v.", path, interval * 10)
 				time.Sleep(interval * 10)
 			}
 		}
@@ -431,7 +444,7 @@ func restart(ctx *cli.Context) (err error) {
 }
 
 func daemon(ctx *cli.Context) (err error) {
-	manager.Watch(time.Duration(ctx.Int("w")) * time.Second)
+	manager.Watch()
 	return
 }
 
@@ -505,14 +518,6 @@ func main() {
 				Name: "daemon",
 				Usage: "Wizard daemon process to watch specified processes",
 				Action: daemon,
-				Flags: []cli.Flag {
-					&cli.IntFlag{
-						Name:    "w",
-						Aliases: []string{"wait"},
-						Value:   1,
-						Usage:   "seconds as interval to check the status of processes",
-					},
-				},
 			},
 		},
 	}

@@ -51,6 +51,7 @@ Sampe `~/.wiz`
 ```
 [main]
 cmd = wizard daemon
+interval = 1000 // specify daemon watch interval(ms)
 
 [daemon]
 ~/app1

@@ -20,7 +20,6 @@ import (
 	"golang.org/x/term"
 
 	"github.com/devfans/envconf"
-	"github.com/devfans/golang/log"
 	"github.com/urfave/cli/v2"
 )
 
@@ -252,20 +251,10 @@ func (m *Manager) watch(path string) {
 	}
 }
 
-func (m *Manager) openLogFile() (logFileObject io.Writer, err error) {
+func (m *Manager) openLogFile() (writer io.Writer, closer func() error, err error) {
 	logFile := m.config.Get("log")
 	if logFile == "" {
 		return
-	}
-	maxSize, _ := strconv.Atoi(m.config.Get("LOG_SIZE", "log_size"))
-	if maxSize > 0 {
-		maxFiles, _ := strconv.Atoi(m.config.Get("LOG_FILES", "log_files", 5))
-		logConf := &log.LogConfig{
-			Path:     logFile,
-			MaxFiles: uint(maxFiles),
-			MaxSize:  uint(maxSize),
-		}
-		return logConf.Writer(), nil
 	}
 
 	if _, err := os.Stat(logFile); err == nil {
@@ -275,12 +264,11 @@ func (m *Manager) openLogFile() (logFileObject io.Writer, err error) {
 		}
 	}
 
-	logFileObject, err = os.OpenFile(logFile, os.O_RDWR|os.O_CREATE, 0664)
+	logFileObject, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE, 0664)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create log file %v: %v", logFile, err)
+		return nil, nil, fmt.Errorf("failed to create log file %v: %v", logFile, err)
 	}
-	// defer logFileObject.Close()
-	return
+	return logFileObject, logFileObject.Close, nil
 }
 
 func (m *Manager) spawn(input bool) error {
@@ -315,13 +303,17 @@ func (m *Manager) spawn(input bool) error {
 
 	// Add logging
 	if m.logging {
-		logFileObject, err := m.openLogFile()
+		logFileObject, closer, err := m.openLogFile()
 		if err != nil {
 			return err
 		}
 		if logFileObject != nil {
 			cmd.Stdout = logFileObject
 			cmd.Stderr = logFileObject
+			if closer != nil {
+				defer closer()
+			}
+			// defer logFileObject.Close()
 		}
 	}
 
@@ -377,7 +369,7 @@ func (m *Manager) Start(input bool) {
 	if err != nil {
 		Fatal(err.Error())
 	}
-	Info("Process is started")
+	Info("Process is started (PID %v)", m.pid)
 }
 
 func (m *Manager) Stop() {

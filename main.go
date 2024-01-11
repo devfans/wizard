@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path"
@@ -14,12 +15,12 @@ import (
 	"syscall"
 
 	"encoding/json"
-	"io/ioutil"
 	"path/filepath"
 
 	"golang.org/x/term"
 
 	"github.com/devfans/envconf"
+	"github.com/devfans/golang/log"
 	"github.com/urfave/cli/v2"
 )
 
@@ -102,7 +103,7 @@ func (m *Manager) Init() error {
 	m.config.Put("logging", m.logging)
 
 	if m.logging {
-		logFile := m.config.Get("log")
+		logFile := m.config.Get("LOG_FILE", "log")
 		if logFile == "" {
 			logFile = "app.log"
 		}
@@ -121,7 +122,7 @@ func (m *Manager) getEnv() []string {
 
 func (m *Manager) findProcess() bool {
 	pidFile := m.config.Get("pid")
-	pidData, err := ioutil.ReadFile(pidFile)
+	pidData, err := os.ReadFile(pidFile)
 	if err != nil {
 		Info("Failed to read pid file: %v", err)
 		return false
@@ -139,11 +140,7 @@ func (m *Manager) findProcess() bool {
 		return false
 	}
 
-	err = m.process.Signal(syscall.Signal(0))
-	if err != nil {
-		return false
-	}
-	return true
+	return m.process.Signal(syscall.Signal(0)) == nil
 }
 
 func (m *Manager) parseCommand(command string) (string, []string) {
@@ -255,6 +252,37 @@ func (m *Manager) watch(path string) {
 	}
 }
 
+func (m *Manager) openLogFile() (logFileObject io.Writer, err error) {
+	logFile := m.config.Get("log")
+	if logFile == "" {
+		return
+	}
+	maxSize, _ := strconv.Atoi(m.config.Get("LOG_SIZE", "log_size"))
+	if maxSize > 0 {
+		maxFiles, _ := strconv.Atoi(m.config.Get("LOG_FILES", "log_files", 5))
+		logConf := &log.LogConfig{
+			Path:     logFile,
+			MaxFiles: uint(maxFiles),
+			MaxSize:  uint(maxSize),
+		}
+		return logConf.Writer(), nil
+	}
+
+	if _, err := os.Stat(logFile); err == nil {
+		err = os.Rename(logFile, logFile+string(time.Now().Format(time.RFC3339)))
+		if err != nil {
+			Info("Failed to rename old log file %v: %v", logFile, err)
+		}
+	}
+
+	logFileObject, err = os.OpenFile(logFile, os.O_RDWR|os.O_CREATE, 0664)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create log file %v: %v", logFile, err)
+	}
+	// defer logFileObject.Close()
+	return
+}
+
 func (m *Manager) spawn(input bool) error {
 	pidFile := m.config.Get("pid")
 	pidFileObject, err := os.OpenFile(pidFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0664)
@@ -287,22 +315,14 @@ func (m *Manager) spawn(input bool) error {
 
 	// Add logging
 	if m.logging {
-		logFile := m.config.Get("log")
-		if _, err := os.Stat(logFile); err == nil {
-			err = os.Rename(logFile, logFile+string(time.Now().Format(time.RFC3339)))
-			if err != nil {
-				Info("Failed to rename old log file %v: %v", logFile, err)
-			}
-		}
-
-		logFileObject, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE, 0664)
+		logFileObject, err := m.openLogFile()
 		if err != nil {
-			return fmt.Errorf("failed to create log file %v: %v", logFile, err)
+			return err
 		}
-		defer logFileObject.Close()
-
-		cmd.Stdout = logFileObject
-		cmd.Stderr = logFileObject
+		if logFileObject != nil {
+			cmd.Stdout = logFileObject
+			cmd.Stderr = logFileObject
+		}
 	}
 
 	cmd.SysProcAttr = &syscall.SysProcAttr{

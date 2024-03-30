@@ -279,12 +279,21 @@ func (m *Manager) spawn(input bool) error {
 	}
 	defer pidFileObject.Close()
 
+	dir := m.config.Get("dir")
+	if dir == "" {
+		dir = "."
+	}
+	dir, err = filepath.Abs(dir)
+	if err != nil {
+		return fmt.Errorf("invalid work directory: %v", err)
+	}
+
 	command := m.config.Get("cmd")
 	exe, args := m.parseCommand(command)
 	exe = strings.Replace(exe, "~", os.Getenv("HOME"), 1)
 	_, err = exec.LookPath(exe)
 	if err != nil {
-		exe, err = filepath.Abs(exe)
+		exe, err = filepath.Abs(filepath.Join(dir, exe))
 		if err != nil {
 			return fmt.Errorf("failed to find executable %v: %v", exe, err)
 		}
@@ -330,19 +339,10 @@ func (m *Manager) spawn(input bool) error {
 		cmd.Stdin = bytes.NewReader(data)
 	}
 
-	dir := m.config.Get("dir")
-	if dir == "" {
-		dir = "."
-	}
-	dir, err = filepath.Abs(dir)
-	if err != nil {
-		return fmt.Errorf("invalid work directory: %v", err)
-	}
 	cmd.Dir = dir
-
 	err = cmd.Start()
 	if err != nil {
-		return fmt.Errorf("failed to spawn the process: %v", err)
+		return fmt.Errorf("failed to spawn the process: %v, dir %v", err, cmd.Dir)
 	}
 
 	m.pid = cmd.Process.Pid

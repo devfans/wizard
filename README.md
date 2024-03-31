@@ -44,9 +44,8 @@ var2=value2
 
 ## Daemon
 
-Wizard can start a daemon process to watch specified processes in `~/.wiz`
-
-Sampe `~/.wiz` 
+Wizard can start a daemon process to watch specified processes in config file.
+Sampe config file `.wiz`
 
 ```
 [main]
@@ -58,7 +57,7 @@ cmd = wizard daemon
 ~/app3/.wiz
 ```
 
-Sample `~/app3/.wiz`
+Sample `~/app1/.wiz`
 
 ```
 cmd = server-run -s -c

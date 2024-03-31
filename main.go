@@ -231,7 +231,7 @@ func (m *Manager) watch(path string) {
 	}
 	intervalValue, err := strconv.ParseInt(config.GetConf("interval", "1000"), 10, 0)
 	if err != nil {
-		Warn("Invalid interval string, err %v, will use 1s instead", config.GetConf("interval"), err)
+		Warn("Invalid interval string %s, err %v, will use 1s instead, path %s", config.GetConf("interval"), err, path)
 		intervalValue = 1000
 	}
 	interval := time.Duration(intervalValue) * time.Millisecond
@@ -242,7 +242,7 @@ func (m *Manager) watch(path string) {
 			Warn("Found stopped process %v, starting it now...", path)
 			err := pm.spawn(false)
 			if err != nil {
-				Warn(err.Error())
+				Warn("Spawn process failed, path %s, err %v", path, err)
 			} else {
 				Warn("Will check process %v after %v.", path, interval * 10)
 				time.Sleep(interval * 10)
@@ -420,9 +420,6 @@ func ReadInput(name string) ([]byte, error) {
 func initialize(ctx *cli.Context) error {
 	path := ctx.String("config")
 	isDaemon := ctx.Args().First() == "daemon"
-	if isDaemon {
-		path = "~/.wiz"
-	}
 	config := envconf.NewConfig(path)
 	manager = &Manager{config: config, logging: true, daemon: isDaemon}
 	err := manager.Init()
@@ -463,6 +460,7 @@ func daemon(ctx *cli.Context) (err error) {
 func main() {
 	app := &cli.App{
 		Name:  "wizard",
+		Version: "v0.4.4",
 		Usage: "The awesome process manager",
 		Flags: []cli.Flag{
 			&cli.StringFlag{

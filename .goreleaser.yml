@@ -6,12 +6,11 @@ builds:
     goarch:
       - amd64
       - arm64
+  - ldflags:
+   - -s -w -X "main.version={{.Env.VERSION}}"
 # Archive customization
 archives:
   - format: tar.gz
-    replacements:
-      amd64: 64-bit
-      darwin: macOS
     files:
       - LICENSE
       - README.md

@@ -457,10 +457,11 @@ func daemon(ctx *cli.Context) (err error) {
 	return
 }
 
+var version string
 func main() {
 	app := &cli.App{
 		Name:  "wizard",
-		Version: "v0.4.4",
+		Version: version,
 		Usage: "The awesome process manager",
 		Flags: []cli.Flag{
 			&cli.StringFlag{

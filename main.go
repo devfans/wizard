@@ -214,40 +214,49 @@ func (m *Manager) watch(path string) {
 	} else if info.IsDir() {
 		path = filepath.Join(path, ".wiz")
 	}
-	config := envconf.NewConfig(path)
-	dir := config.Get("dir")
-	if dir == "" {
-		config.Put("dir", filepath.Dir(path))
-	}
-	if config.Get("no_daemon") == "true" {
-		Warn("Skipping process %s as required.", path)
-		return
-	} 
-	pm := &Manager{config: config, logging: true}
-	err := pm.Init()
-	if err != nil {
-		Warn("Failed to init daemon for process %s, err: %v", path, err)
-		return
-	}
-	intervalValue, err := strconv.ParseInt(config.GetConf("interval", "1000"), 10, 0)
-	if err != nil {
-		Warn("Invalid interval string %s, err %v, will use 1s instead, path %s", config.GetConf("interval"), err, path)
-		intervalValue = 1000
-	}
-	interval := time.Duration(intervalValue) * time.Millisecond
+	
 	Info("Starting process daemon for %s", path)
-	timer := time.NewTicker(interval)
-	for range timer.C {
-		if !pm.findProcess() {
-			Warn("Found stopped process %v, starting it now...", path)
-			err := pm.spawn(false)
-			if err != nil {
-				Warn("Spawn process failed, path %s, err %v", path, err)
-			} else {
-				Warn("Will check process %v after %v.", path, interval * 10)
-				time.Sleep(interval * 10)
+
+	for {
+		now := time.Now()
+		config := envconf.NewConfig(path)
+		dir := config.Get("dir")
+		if dir == "" {
+			config.Put("dir", filepath.Dir(path))
+		}
+		intervalValue, err := strconv.ParseInt(config.GetConf("interval", "1000"), 10, 0)
+		if err != nil {
+			Warn("Invalid interval string %s, err %v, will use 1s instead, path %s", config.GetConf("interval"), err, path)
+			intervalValue = 1000
+		}
+		interval := time.Duration(intervalValue) * time.Millisecond
+
+		if config.Get("no_daemon") == "true" {
+			Warn("Skipping process %s as required.", path)
+			time.Sleep(interval - time.Since(now))
+			continue
+		}
+		
+		pm := &Manager{config: config, logging: true}
+		err = pm.Init()
+		if err != nil {
+			Warn("Failed to init daemon for process %s, err: %v, this process will be skipped.", path, err)
+			time.Sleep(interval - time.Since(now))
+			continue
+		}
+		
+		{
+			if !pm.findProcess() {
+				Warn("Found stopped process %v, starting it now...", path)
+				err := pm.spawn(false)
+				if err != nil {
+					Warn("Spawn process failed, path %s, err %v", path, err)
+				} else {
+					Warn("Spawn process done %s, will check after %v", path, interval)
+				}
 			}
 		}
+		time.Sleep(interval - time.Since(now))
 	}
 }
 

@@ -3,7 +3,7 @@ module github.com/devfans/wizard
 go 1.17
 
 require (
-	github.com/devfans/envconf v0.0.3
+	github.com/devfans/envconf v0.0.9
 	github.com/urfave/cli/v2 v2.23.7
 	golang.org/x/term v0.3.0
 )

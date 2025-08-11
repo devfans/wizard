@@ -71,7 +71,7 @@ type Manager struct {
 func (m *Manager) Init() error {
 	var err error
 	// Validate work directory
-	dir := m.config.Get("dir")
+	dir := m.config.Get("dir").String()
 	if dir == "" {
 		dir = "."
 	}
@@ -82,27 +82,27 @@ func (m *Manager) Init() error {
 	m.config.Put("dir", dir)
 
 	// Validate command path
-	cmd := m.config.Get("cmd")
+	cmd := m.config.Get("cmd").String()
 	if cmd == "" && !m.daemon {
 		return fmt.Errorf("process command line is not specified")
 	}
 
 	// Validate pid file path
-	pid := m.config.Get("pid")
+	pid := m.config.Get("pid").String()
 	if pid == "" {
 		pid = ".pid"
 	}
 	m.config.Put("pid", path.Join(dir, pid))
 
 	// Validate log file path
-	logging := m.config.Get("logging")
+	logging := m.config.Get("logging").String()
 	if logging != "" && strings.ToLower(logging) == "false" {
 		m.logging = false
 	}
 	m.config.Put("logging", m.logging)
 
 	if m.logging {
-		logFile := m.config.Get("LOG_FILE", "log")
+		logFile := m.config.Get("LOG_FILE", "log").String()
 		if logFile == "" {
 			logFile = "app.log"
 		}
@@ -120,7 +120,7 @@ func (m *Manager) getEnv() []string {
 }
 
 func (m *Manager) findProcess() bool {
-	pidFile := m.config.Get("pid")
+	pidFile := m.config.Get("pid").String()
 	pidData, err := os.ReadFile(pidFile)
 	if err != nil {
 		Info("Failed to read pid file: %v", err)
@@ -224,18 +224,18 @@ func (m *Manager) watch(path string) {
 	for {
 		now := time.Now()
 		config := envconf.NewConfig(path)
-		dir := config.Get("dir")
+		dir := config.Get("dir").String()
 		if dir == "" {
 			config.Put("dir", filepath.Dir(path))
 		}
-		intervalValue, err := strconv.ParseInt(config.GetConf("interval", "1000"), 10, 0)
+		intervalValue, err := strconv.ParseInt(config.GetConf("interval", "1000").String(), 10, 0)
 		if err != nil {
-			Warn("Invalid interval string %s, err %v, will use 1s instead, path %s", config.GetConf("interval"), err, path)
+			Warn("Invalid interval string %s, err %v, will use 1s instead, path %s", config.GetConf("interval").String(), err, path)
 			intervalValue = 1000
 		}
 		interval := time.Duration(intervalValue) * time.Millisecond
 
-		if config.Get("no_daemon") == "true" {
+		if config.Get("no_daemon").String() == "true" {
 			Warn("Skipping process %s as required.", path)
 			time.Sleep(interval - time.Since(now))
 			continue
@@ -265,7 +265,7 @@ func (m *Manager) watch(path string) {
 }
 
 func (m *Manager) openLogFile() (writer io.Writer, closer func() error, err error) {
-	logFile := m.config.Get("log")
+	logFile := m.config.Get("log").String()
 	if logFile == "" {
 		return
 	}
@@ -285,14 +285,14 @@ func (m *Manager) openLogFile() (writer io.Writer, closer func() error, err erro
 }
 
 func (m *Manager) spawn(input bool) error {
-	pidFile := m.config.Get("pid")
+	pidFile := m.config.Get("pid").String()
 	pidFileObject, err := os.OpenFile(pidFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0664)
 	if err != nil {
 		return fmt.Errorf("failed to create pid file %v: %v", pidFile, err)
 	}
 	defer pidFileObject.Close()
 
-	dir := m.config.Get("dir")
+	dir := m.config.Get("dir").String()
 	if dir == "" {
 		dir = "."
 	}
@@ -301,7 +301,7 @@ func (m *Manager) spawn(input bool) error {
 		return fmt.Errorf("invalid work directory: %v", err)
 	}
 
-	command := m.config.Get("cmd")
+	command := m.config.Get("cmd").String()
 	exe, args := m.parseCommand(command)
 	exe = strings.Replace(exe, "~", os.Getenv("HOME"), 1)
 	_, err = exec.LookPath(exe)

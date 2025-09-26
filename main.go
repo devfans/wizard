@@ -194,16 +194,20 @@ func (m *Manager) parseCommand(command string) (string, []string) {
 
 func (m *Manager) Watch() {	
 	sec := m.config.GetSection("daemon")
-	wg := &sync.WaitGroup{}
-	for _, path := range sec.List() {
-		wg.Add(1)
-		go func (path string) {
-			m.watch(path)
-			wg.Done()
-		} (path)
+	for {
+		Info("Start watching now, %d targets found.", len(sec.List()))
+		wg := &sync.WaitGroup{}
+		for _, path := range sec.List() {
+			wg.Add(1)
+			go func (path string) {
+				m.watch(path)
+				wg.Done()
+			} (path)
+		}
+		wg.Wait()
+		Warn("All daemons exit, will re-watch after a while(one minute)...")
+		time.Sleep(time.Minute)
 	}
-	wg.Wait()
-	Warn("All daemon exits, now stopping...")
 }
 
 func (m *Manager) watch(path string) {

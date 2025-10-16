@@ -344,7 +344,9 @@ func (m *Manager) run(input bool) error {
 	signal.Notify(sigChan)
 	go func () {
 		for sig := range sigChan{
-			cmd.Process.Signal(sig)
+			if err := cmd.Process.Signal(sig); err != nil {
+				Warn("Proccess signal error %s %v", sig, err)
+			}
 		}
 	}()
 	return cmd.Wait()

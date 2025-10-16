@@ -284,6 +284,60 @@ func (m *Manager) openLogFile() (writer io.Writer, closer func() error, err erro
 	return logFileObject, logFileObject.Close, nil
 }
 
+
+func (m *Manager) run(input bool) error {
+	dir := m.config.Get("dir").String()
+	if dir == "" {
+		dir = "."
+	}
+	dir, err := filepath.Abs(dir)
+	if err != nil {
+		return fmt.Errorf("invalid work directory: %v", err)
+	}
+
+	command := m.config.Get("cmd").String()
+	exe, args := m.parseCommand(command)
+	exe = strings.Replace(exe, "~", os.Getenv("HOME"), 1)
+	_, err = exec.LookPath(exe)
+	if err != nil {
+		exe, err = filepath.Abs(filepath.Join(dir, exe))
+		if err != nil {
+			return fmt.Errorf("failed to find executable %v: %v", exe, err)
+		}
+	}
+	Info("Wizard is running process with below command and args")
+	argstr, _ := json.Marshal(args)
+	Info("%v %s", exe, string(argstr))
+
+	cmd := exec.Command(exe, args...)
+	// Append extra env vars
+	envars := m.getEnv()
+	if len(envars) > 0 {
+		Info("Extra env vars: %v", envars)
+		cmd.Env = append(os.Environ(), envars...)
+	}
+
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		// Pdeathsig: syscall.SIGKILL,
+		Setpgid: true,
+	}
+
+	if input {
+		data, err := ReadInput("input")
+		if err != nil {
+			return fmt.Errorf("failed to read input: %v", err)
+		}
+		cmd.Stdin = bytes.NewReader(data)
+	}
+
+	cmd.Dir = dir
+	err = cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to run the process: %v, dir %v", err, cmd.Dir)
+	}
+	return nil
+}
+
 func (m *Manager) spawn(input bool) error {
 	pidFile := m.config.Get("pid").String()
 	pidFileObject, err := os.OpenFile(pidFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0664)
@@ -385,6 +439,13 @@ func (m *Manager) Start(input bool) {
 	Info("Process is started (PID %v)", m.pid)
 }
 
+func (m *Manager) Run(input bool) {
+	err := m.run(input)
+	if err != nil {
+		Fatal(err.Error())
+	}
+}
+
 func (m *Manager) Stop() {
 	if m.findProcess() {
 		err := m.process.Signal(syscall.SIGTERM)
@@ -447,6 +508,11 @@ func start(ctx *cli.Context) (err error) {
 	return
 }
 
+func run(ctx *cli.Context) (err error) {
+	manager.Run(ctx.Bool("i"))
+	return
+}
+
 func status(ctx *cli.Context) (err error) {
 	manager.Status()
 	return
@@ -490,6 +556,18 @@ func main() {
 				Name:   "start",
 				Usage:  "Launch the process",
 				Action: start,
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:    "i",
+						Aliases: []string{"input", "stdin"},
+						Usage:   "input from stdin",
+					},
+				},
+			},
+			{
+				Name:   "run",
+				Usage:  "Run the process and wait to complete",
+				Action: run,
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
 						Name:    "i",

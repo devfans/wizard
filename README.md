@@ -12,6 +12,7 @@ USAGE:
 
 COMMANDS:
    start    Launch the process
+   run      Run the process and wait to complete
    stop     Stop the running process
    status   Check status of the process
    restart  Restart the process

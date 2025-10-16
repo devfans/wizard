@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path"
 	"sync"
 	"time"
@@ -310,6 +311,8 @@ func (m *Manager) run(input bool) error {
 	Info("%v %s", exe, string(argstr))
 
 	cmd := exec.Command(exe, args...)
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
 	// Append extra env vars
 	envars := m.getEnv()
 	if len(envars) > 0 {
@@ -328,14 +331,23 @@ func (m *Manager) run(input bool) error {
 			return fmt.Errorf("failed to read input: %v", err)
 		}
 		cmd.Stdin = bytes.NewReader(data)
+	} else {
+		cmd.Stdin = os.Stdin
 	}
 
 	cmd.Dir = dir
-	err = cmd.Run()
+	err = cmd.Start()
 	if err != nil {
 		return fmt.Errorf("failed to run the process: %v, dir %v", err, cmd.Dir)
 	}
-	return nil
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan)
+	go func () {
+		for sig := range sigChan{
+			cmd.Process.Signal(sig)
+		}
+	}()
+	return cmd.Wait()
 }
 
 func (m *Manager) spawn(input bool) error {
@@ -446,32 +458,38 @@ func (m *Manager) Run(input bool) {
 	}
 }
 
-func (m *Manager) Stop() {
-	if m.findProcess() {
-		err := m.process.Signal(syscall.SIGTERM)
+func (m *Manager) stop() {
+	err := m.process.Signal(syscall.SIGTERM)
+	if err != nil {
+		Fatal("Error encountered: %v", err)
+	}
+	count := 0
+	for {
+		err = m.process.Signal(syscall.Signal(0))
 		if err != nil {
-			Fatal("Error encountered: %v", err)
+			break
 		}
-		count := 0
-		for {
-			err = m.process.Signal(syscall.Signal(0))
+		if count > _KILL_WAIT && _KILL_WAIT > 0 {
+			Info("Force process to exit now...")
+			err = m.process.Kill()
 			if err != nil {
-				break
+				Info("Error encountered: %v", err)
 			}
-			if count > _KILL_WAIT && _KILL_WAIT > 0 {
-				Info("Force process to exit now...")
-				err = m.process.Kill()
-				if err != nil {
-					Info("Error encountered: %v", err)
-				}
-				break
-			} else {
-				time.Sleep(10 * time.Millisecond)
-				count++
-			}
+			break
+		} else {
+			time.Sleep(10 * time.Millisecond)
+			count++
 		}
 	}
 	Info("Process is stopped")
+}
+
+func (m *Manager) Stop() {
+	if m.findProcess() {
+		m.stop()
+	} else {
+		Info("Process is not running")
+	}
 }
 
 func (m *Manager) Status() {
